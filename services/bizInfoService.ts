@@ -20,6 +20,10 @@ const stripHtml = (html: string): string => {
 const normalizeItem = (item: any, type: 'program' | 'event'): UnifiedBizItem => {
   // Common Logic
   const stripAndTrim = (val: string) => stripHtml(val).trim();
+  
+  // Handle both 'hashtags' (JSON spec) and 'hashTags' (XML spec/potential variation)
+  const getRawTags = (obj: any) => obj.hashtags || obj.hashTags || '';
+  
   const parseTags = (tagStr: string) => tagStr ? tagStr.split(',').map(t => t.trim()).filter(Boolean) : [];
   
   // Date Formatting (YYYYMMDD ~ YYYYMMDD -> YYYY.MM.DD ~ MM.DD)
@@ -47,7 +51,7 @@ const normalizeItem = (item: any, type: 'program' | 'event'): UnifiedBizItem => 
       summary: stripAndTrim(p.bsnsSumryCn),
       category: p.pldirSportRealmLclasCodeNm || '기타',
       target: p.trgetNm,
-      tags: parseTags(p.hashTags),
+      tags: parseTags(getRawTags(p)),
       dateInfo: formatPeriod(p.reqstBeginEndDe)
     };
   } else {
@@ -56,18 +60,21 @@ const normalizeItem = (item: any, type: 'program' | 'event'): UnifiedBizItem => 
     // Areas in events are often separated by @
     const areas = e.areaNm ? e.areaNm.split('@').filter(Boolean) : [];
     
+    // Manual Page 20 lists 'orginlUrlAdres' (typo) as the key. We check both.
+    const detailUrl = e.orginlUrlAdres || e.originUrlAdres || e.bizinfoUrl || '#';
+
     return {
-      id: e.eventInfoId || (item.seq) || `E_${Math.random()}`, // Sometimes JSON key varies
+      id: e.eventInfoId || `E_${Math.random()}`,
       type: 'event',
-      title: e.nttNm || item.title || '제목 없음',
-      organization: e.originEngnNm || item.originOrg || '주최기관 미정',
-      period: e.eventBeginEndDe || item.eventPeriod || '',
-      url: e.originUrlAdres || e.bizinfoUrl || item.link || '#',
-      summary: stripAndTrim(e.nttCn || item.description),
-      category: (e.pldirSportRealmLclasCodeNm || item.lcategory || '').replace(/@/g, ','),
+      title: e.nttNm || '제목 없음',
+      organization: e.originEngnNm || '주최기관 미정',
+      period: e.eventBeginEndDe || '',
+      url: detailUrl,
+      summary: stripAndTrim(e.nttCn),
+      category: (e.pldirSportRealmLclasCodeNm || '').replace(/@/g, ','),
       areas: areas,
-      tags: parseTags(e.hashTags || item.hashtags),
-      dateInfo: formatPeriod(e.eventBeginEndDe || item.eventPeriod)
+      tags: parseTags(getRawTags(e)),
+      dateInfo: formatPeriod(e.eventBeginEndDe)
     };
   }
 };
@@ -97,52 +104,78 @@ export const fetchBizInfo = async (
   params.append('dataType', 'json');
   params.append('pageIndex', pageIndex.toString());
   params.append('pageUnit', '12'); // Fetch 12 items per page
-  params.append('_t', Date.now().toString()); // Cache busting
-
+  
+  // NOTE: Manual says searchCnt defaults to 500 if empty.
+  // We strictly rely on pageUnit/pageIndex for pagination.
+  
   // 3. Build Hashtags (Core Search Logic)
-  // The API uses 'hashtags' for keyword search as well as region
   const tags: string[] = [];
 
-  // Region
+  // Region (Manual Page 7: Regions are passed as hashtags)
   if (filters.region && filters.region !== '전국') {
     tags.push(filters.region);
   }
 
   // Keyword (User Input)
   if (filters.keyword) {
-    // Split by space or comma and add
     const keywords = filters.keyword.split(/[\s,]+/).filter(Boolean);
     tags.push(...keywords);
   }
 
-  // Add category name to hashtags to improve search if ID search isn't enough
+  // Category
   if (filters.category) {
+    // Manual Page 6/7: searchLclasId is a separate parameter for Category Codes (01, 02...)
     params.append('searchLclasId', filters.category);
+    
+    // Also adding category name to hashtags can help if ID filter is loose
     const catName = CATEGORIES.find(c => c.id === filters.category)?.name;
     if (catName) tags.push(catName);
   }
 
   if (tags.length > 0) {
-    // Join with comma
     params.append('hashtags', tags.join(','));
   }
 
   // 4. Call via Proxy
   const targetUrl = `${endpoint}?${params.toString()}`;
-  const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
+  
+  // Using corsproxy.io.
+  const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
 
   try {
     const response = await fetch(proxyUrl);
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
     
-    const data: BizInfoApiResponse = await response.json();
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status} from Proxy`);
+    }
+    
+    // The API might return text/html even for JSON requests in error cases, or invalid JSON.
+    const textData = await response.text();
+    let data: any;
+    
+    try {
+        data = JSON.parse(textData);
+    } catch (e) {
+        console.error("JSON Parse Error:", textData.substring(0, 100));
+        throw new Error("Invalid JSON response from API");
+    }
     
     let rawItems: any[] = [];
+    
+    // Manual Page 14/20: Response structure is {"jsonArray": [ ... ]}
+    // However, some XML-to-JSON proxies might wrap it in 'item'.
+    // We handle both native JSON structure and potential proxy wrapper structure.
     if (data && data.jsonArray) {
-      if (Array.isArray(data.jsonArray.item)) {
-        rawItems = data.jsonArray.item;
+      if (Array.isArray(data.jsonArray)) {
+        // Native JSON structure (as per Manual)
+        rawItems = data.jsonArray;
       } else if (data.jsonArray.item) {
-        rawItems = [data.jsonArray.item];
+        // Fallback for XML-converted structures
+        if (Array.isArray(data.jsonArray.item)) {
+          rawItems = data.jsonArray.item;
+        } else {
+          rawItems = [data.jsonArray.item];
+        }
       }
     }
 

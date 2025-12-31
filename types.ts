@@ -32,6 +32,7 @@ export enum LoadingState {
 
 // --- Raw API Response Types (Internal use for parsing) ---
 
+// Based on Manual Page 10 & 14
 export interface RawProgramItem {
   pblancId: string;
   pblancNm: string;
@@ -41,27 +42,34 @@ export interface RawProgramItem {
   bsnsSumryCn: string;
   pldirSportRealmLclasCodeNm: string;
   trgetNm: string;
-  hashTags: string;
+  hashtags?: string; // Manual JSON sample uses lowercase
+  hashTags?: string; // XML uses CamelCase (fallback)
   creatPnttm: string;
 }
 
+// Based on Manual Page 16 & 19-20
 export interface RawEventItem {
-  eventInfoId: string; // Document says 'seq' in XML, 'eventInfoId' or similar in JSON (mapping varies, we handle flexibly)
+  eventInfoId: string;
   nttNm: string;
   originEngnNm: string;
   eventBeginEndDe: string;
-  originUrlAdres?: string; // Sometimes distinct
-  bizinfoUrl?: string; // Sometimes distinct
+  
+  // Manual Page 20 explicitly lists "orginlUrlAdres" (typo in API spec)
+  orginlUrlAdres?: string; 
+  originUrlAdres?: string; // Correct spelling fallback
+  bizinfoUrl?: string; 
+
   nttCn: string;
   pldirSportRealmLclasCodeNm: string;
-  areaNm: string;      // Separated by @
-  hashTags: string;
+  areaNm: string;      
+  
+  hashtags?: string; // Manual JSON sample uses lowercase
+  hashTags?: string; // XML uses CamelCase (fallback)
+  
   registDe: string;
 }
 
 export interface BizInfoApiResponse {
-  jsonArray: {
-    item: any[]; // Can be array or single object
-    [key: string]: any;
-  }
+  // Manual Page 14/20: The root object contains jsonArray which IS the array.
+  jsonArray: RawProgramItem[] | RawEventItem[] | { item: any[] }; 
 }
