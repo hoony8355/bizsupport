@@ -1,0 +1,5 @@
+{
+  "name": "BizSupport Finder",
+  "description": "Find Korean government support programs for businesses based on region and industry category using the BizInfo API.",
+  "requestFramePermissions": []
+}
