@@ -12,7 +12,8 @@ const App: React.FC = () => {
     type: 'program',
     region: '전국',
     category: '',
-    keyword: ''
+    keyword: '',
+    targets: []
   });
   
   // API Key State

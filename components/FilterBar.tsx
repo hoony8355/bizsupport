@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { MapPin, Briefcase, Search, Settings, Key, Info, Type, FileText, Calendar } from 'lucide-react';
-import { REGIONS, CATEGORIES } from '../constants';
+import { MapPin, Briefcase, Search, Settings, Key, Info, Type, FileText, Calendar, Check } from 'lucide-react';
+import { REGIONS, CATEGORIES, TARGET_KEYWORDS } from '../constants';
 import { SearchFilters } from '../types';
 
 interface FilterBarProps {
@@ -24,6 +24,17 @@ const FilterBar: React.FC<FilterBarProps> = ({
   
   const handleChange = (field: keyof SearchFilters, value: string) => {
     setFilters(prev => ({ ...prev, [field]: value }));
+  };
+
+  const toggleTarget = (target: string) => {
+    setFilters(prev => {
+      const current = prev.targets;
+      if (current.includes(target)) {
+        return { ...prev, targets: current.filter(t => t !== target) };
+      } else {
+        return { ...prev, targets: [...current, target] };
+      }
+    });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -104,7 +115,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
              value={filters.keyword}
              onChange={(e) => handleChange('keyword', e.target.value)}
              onKeyDown={handleKeyDown}
-             placeholder={filters.type === 'program' ? "예: 스마트공장, 마케팅, AI" : "예: 설명회, 교육, 세미나"}
+             placeholder={filters.type === 'program' ? "키워드 입력 (예: 스마트공장, AI, 마케팅)" : "키워드 입력 (예: 설명회, 교육, 세미나)"}
              className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500 transition-all text-sm"
            />
            <Search className="absolute left-3.5 top-2.5 w-4 h-4 text-slate-400" />
@@ -141,11 +152,35 @@ const FilterBar: React.FC<FilterBarProps> = ({
           </div>
         </div>
 
+        {/* Row 3: Target Chips (Hashtags) */}
+        <div>
+          <label className="block text-xs font-semibold text-slate-500 mb-2">맞춤 대상 선택 (중복 가능)</label>
+          <div className="flex flex-wrap gap-2">
+            {TARGET_KEYWORDS.map(target => {
+              const isSelected = filters.targets.includes(target);
+              return (
+                <button
+                  key={target}
+                  onClick={() => toggleTarget(target)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all flex items-center gap-1.5 border ${
+                    isSelected 
+                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' 
+                      : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300 hover:text-indigo-600'
+                  }`}
+                >
+                  {isSelected && <Check className="w-3 h-3" />}
+                  {target}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         {/* Search Button */}
         <button
           onClick={onSearch}
           disabled={isLoading}
-          className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg text-sm px-5 py-3 flex items-center justify-center gap-2 transition-all shadow-sm hover:shadow active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed"
+          className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg text-sm px-5 py-3 flex items-center justify-center gap-2 transition-all shadow-sm hover:shadow active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed mt-2"
         >
           {isLoading ? (
             <>

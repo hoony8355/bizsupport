@@ -1,5 +1,5 @@
 import React from 'react';
-import { Calendar, Building, ExternalLink, Tag, MapPin } from 'lucide-react';
+import { Calendar, Building, ExternalLink, Tag, MapPin, Clock } from 'lucide-react';
 import { UnifiedBizItem } from '../types';
 
 interface ProgramCardProps {
@@ -19,15 +19,39 @@ const ProgramCard: React.FC<ProgramCardProps> = ({ item }) => {
     return "bg-slate-100 text-slate-700 border-slate-200";
   };
 
+  // D-Day Badge Style
+  const getDDayBadgeStyle = (dDay: string, status: string) => {
+    if (status === 'CLOSED') return "bg-slate-100 text-slate-500 border-slate-200";
+    if (status === 'UPCOMING') return "bg-yellow-50 text-yellow-700 border-yellow-200";
+    
+    // Urgent (D-0 ~ D-7)
+    if (dDay.startsWith("D-") && dDay.length <= 4) {
+      const days = parseInt(dDay.split('-')[1]);
+      if (days <= 7) return "bg-red-50 text-red-600 border-red-200 animate-pulse";
+    }
+    
+    return "bg-indigo-50 text-indigo-600 border-indigo-200";
+  };
+
   return (
-    <div className="group bg-white rounded-xl border border-slate-200 p-5 hover:border-indigo-300 hover:shadow-md transition-all duration-200 flex flex-col h-full">
+    <div className="group bg-white rounded-xl border border-slate-200 p-5 hover:border-indigo-300 hover:shadow-md transition-all duration-200 flex flex-col h-full relative overflow-hidden">
       
-      {/* Header: Category & Org */}
+      {/* Top Badges */}
       <div className="flex justify-between items-start mb-3">
-        <span className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase tracking-wide ${getBadgeColor(item.category)}`}>
-          {item.category || (item.type === 'event' ? '행사' : '기타')}
-        </span>
-        <span className="text-[11px] text-slate-400 font-medium truncate max-w-[50%] text-right">
+        <div className="flex gap-2">
+           {/* Category Badge */}
+           <span className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase tracking-wide ${getBadgeColor(item.category)}`}>
+             {item.category || (item.type === 'event' ? '행사' : '기타')}
+           </span>
+           
+           {/* D-Day Badge */}
+           <span className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase tracking-wide flex items-center gap-1 ${getDDayBadgeStyle(item.dDay, item.status)}`}>
+             <Clock className="w-3 h-3" />
+             {item.dDay}
+           </span>
+        </div>
+        
+        <span className="text-[11px] text-slate-400 font-medium truncate max-w-[40%] text-right">
           {item.organization}
         </span>
       </div>

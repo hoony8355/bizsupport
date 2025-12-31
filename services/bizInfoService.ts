@@ -15,22 +15,78 @@ const stripHtml = (html: string): string => {
 };
 
 /**
+ * Converts relative URLs to absolute URLs for bizinfo domain.
+ */
+const makeAbsoluteUrl = (url?: string): string => {
+  if (!url || url === '#') return '#';
+  const trimmed = url.trim();
+  if (trimmed.match(/^https?:\/\//i)) return trimmed;
+  if (trimmed.startsWith('/')) return `https://www.bizinfo.go.kr${trimmed}`;
+  return trimmed;
+};
+
+/**
+ * Calculates D-Day and Status from period string
+ */
+const calculateStatus = (period: string): { status: 'OPEN' | 'CLOSED' | 'UPCOMING', dDay: string } => {
+  if (!period) return { status: 'OPEN', dDay: '상시/미정' };
+
+  // Extract dates (Matches YYYYMMDD)
+  const dates = period.match(/\d{8}/g); 
+  if (!dates || dates.length === 0) return { status: 'OPEN', dDay: '일정 확인' };
+
+  const today = new Date();
+  today.setHours(0,0,0,0);
+
+  // Parse End Date
+  const endStr = dates[dates.length - 1]; // Use the last date found as end date
+  const eYear = parseInt(endStr.substring(0, 4));
+  const eMonth = parseInt(endStr.substring(4, 6)) - 1;
+  const eDay = parseInt(endStr.substring(6, 8));
+  const endDate = new Date(eYear, eMonth, eDay);
+
+  // Parse Start Date (if available)
+  let startDate = new Date();
+  if (dates.length > 1) {
+    const startStr = dates[0];
+    const sYear = parseInt(startStr.substring(0, 4));
+    const sMonth = parseInt(startStr.substring(4, 6)) - 1;
+    const sDay = parseInt(startStr.substring(6, 8));
+    startDate = new Date(sYear, sMonth, sDay);
+  } else {
+    startDate = endDate; // Fallback if only one date
+  }
+  
+  const diffTime = endDate.getTime() - today.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+  if (diffDays < 0) return { status: 'CLOSED', dDay: '마감' };
+  
+  // Check if upcoming
+  if (startDate > today) {
+     return { status: 'UPCOMING', dDay: '접수예정' };
+  }
+
+  if (diffDays === 0) return { status: 'OPEN', dDay: 'D-Day' };
+  if (diffDays <= 14) return { status: 'OPEN', dDay: `D-${diffDays}` };
+  
+  return { status: 'OPEN', dDay: '접수중' };
+};
+
+/**
  * Normalizes API response items into a unified structure.
  */
 const normalizeItem = (item: any, type: 'program' | 'event'): UnifiedBizItem => {
   // Common Logic
   const stripAndTrim = (val: string) => stripHtml(val).trim();
   
-  // Handle both 'hashtags' (JSON spec) and 'hashTags' (XML spec/potential variation)
   const getRawTags = (obj: any) => obj.hashtags || obj.hashTags || '';
-  
   const parseTags = (tagStr: string) => tagStr ? tagStr.split(',').map(t => t.trim()).filter(Boolean) : [];
   
-  // Date Formatting (YYYYMMDD ~ YYYYMMDD -> YYYY.MM.DD ~ MM.DD)
   const formatPeriod = (period: string) => {
     if (!period) return '기간 미정';
     const clean = period.replace(/[^0-9~]/g, '');
-    if (clean.length >= 17) { // 20220101~20220102
+    if (clean.length >= 17) {
        const start = `${clean.substring(0,4)}.${clean.substring(4,6)}.${clean.substring(6,8)}`;
        const end = `${clean.substring(13,15)}.${clean.substring(15,17)}`;
        return `${start} ~ ${end}`;
@@ -40,28 +96,39 @@ const normalizeItem = (item: any, type: 'program' | 'event'): UnifiedBizItem => 
 
   if (type === 'program') {
     const p = item as RawProgramItem;
-    // JSON keys based on documentation
+    const viewUrl = makeAbsoluteUrl(p.pblancUrl);
+    const { status, dDay } = calculateStatus(p.reqstBeginEndDe);
+
     return {
       id: p.pblancId || `P_${Math.random()}`,
       type: 'program',
       title: p.pblancNm || '제목 없음',
       organization: p.jrsdInsttNm || '소관기관 미정',
       period: p.reqstBeginEndDe || '',
-      url: p.pblancUrl || '#',
+      url: viewUrl,
       summary: stripAndTrim(p.bsnsSumryCn),
       category: p.pldirSportRealmLclasCodeNm || '기타',
       target: p.trgetNm,
       tags: parseTags(getRawTags(p)),
-      dateInfo: formatPeriod(p.reqstBeginEndDe)
+      dateInfo: formatPeriod(p.reqstBeginEndDe),
+      status,
+      dDay
     };
   } else {
     const e = item as RawEventItem;
-    // Event JSON keys are slightly different
-    // Areas in events are often separated by @
     const areas = e.areaNm ? e.areaNm.split('@').filter(Boolean) : [];
     
-    // Manual Page 20 lists 'orginlUrlAdres' (typo) as the key. We check both.
-    const detailUrl = e.orginlUrlAdres || e.originUrlAdres || e.bizinfoUrl || '#';
+    const externalUrl = e.orginlUrlAdres || e.originUrlAdres;
+    const internalUrl = e.bizinfoUrl;
+    
+    let finalUrl = '#';
+    if (externalUrl && externalUrl !== '#') {
+        finalUrl = makeAbsoluteUrl(externalUrl);
+    } else if (internalUrl) {
+        finalUrl = makeAbsoluteUrl(internalUrl);
+    }
+
+    const { status, dDay } = calculateStatus(e.eventBeginEndDe);
 
     return {
       id: e.eventInfoId || `E_${Math.random()}`,
@@ -69,12 +136,14 @@ const normalizeItem = (item: any, type: 'program' | 'event'): UnifiedBizItem => 
       title: e.nttNm || '제목 없음',
       organization: e.originEngnNm || '주최기관 미정',
       period: e.eventBeginEndDe || '',
-      url: detailUrl,
+      url: finalUrl,
       summary: stripAndTrim(e.nttCn),
       category: (e.pldirSportRealmLclasCodeNm || '').replace(/@/g, ','),
       areas: areas,
       tags: parseTags(getRawTags(e)),
-      dateInfo: formatPeriod(e.eventBeginEndDe)
+      dateInfo: formatPeriod(e.eventBeginEndDe),
+      status,
+      dDay
     };
   }
 };
@@ -89,57 +158,46 @@ export const fetchBizInfo = async (
 ): Promise<UnifiedBizItem[]> => {
   
   if (!apiKey) {
-    // Return Mock Data for Demo
-    if (pageIndex > 1) return []; // No pagination for mock
+    if (pageIndex > 1) return [];
     await new Promise(resolve => setTimeout(resolve, 600));
     return MOCK_DATA.filter(item => item.type === filters.type);
   }
 
-  // 1. Determine Endpoint
   const endpoint = filters.type === 'program' ? BASE_URL_PROGRAM : BASE_URL_EVENT;
-
-  // 2. Build Parameters
   const params = new URLSearchParams();
   params.append('crtfcKey', apiKey);
   params.append('dataType', 'json');
   params.append('pageIndex', pageIndex.toString());
-  params.append('pageUnit', '12'); // Fetch 12 items per page
+  params.append('pageUnit', '12');
   
-  // NOTE: Manual says searchCnt defaults to 500 if empty.
-  // We strictly rely on pageUnit/pageIndex for pagination.
-  
-  // 3. Build Hashtags (Core Search Logic)
   const tags: string[] = [];
 
-  // Region (Manual Page 7: Regions are passed as hashtags)
+  // Region
   if (filters.region && filters.region !== '전국') {
     tags.push(filters.region);
   }
 
-  // Keyword (User Input)
+  // Keyword
   if (filters.keyword) {
     const keywords = filters.keyword.split(/[\s,]+/).filter(Boolean);
     tags.push(...keywords);
   }
+  
+  // Target Chips (Important for detailed search)
+  if (filters.targets && filters.targets.length > 0) {
+    tags.push(...filters.targets);
+  }
 
   // Category
   if (filters.category) {
-    // Manual Page 6/7: searchLclasId is a separate parameter for Category Codes (01, 02...)
     params.append('searchLclasId', filters.category);
-    
-    // Also adding category name to hashtags can help if ID filter is loose
-    const catName = CATEGORIES.find(c => c.id === filters.category)?.name;
-    if (catName) tags.push(catName);
   }
 
   if (tags.length > 0) {
     params.append('hashtags', tags.join(','));
   }
 
-  // 4. Call via Proxy
   const targetUrl = `${endpoint}?${params.toString()}`;
-  
-  // Using corsproxy.io.
   const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
 
   try {
@@ -149,7 +207,6 @@ export const fetchBizInfo = async (
       throw new Error(`HTTP ${response.status} from Proxy`);
     }
     
-    // The API might return text/html even for JSON requests in error cases, or invalid JSON.
     const textData = await response.text();
     let data: any;
     
@@ -162,15 +219,10 @@ export const fetchBizInfo = async (
     
     let rawItems: any[] = [];
     
-    // Manual Page 14/20: Response structure is {"jsonArray": [ ... ]}
-    // However, some XML-to-JSON proxies might wrap it in 'item'.
-    // We handle both native JSON structure and potential proxy wrapper structure.
     if (data && data.jsonArray) {
       if (Array.isArray(data.jsonArray)) {
-        // Native JSON structure (as per Manual)
         rawItems = data.jsonArray;
       } else if (data.jsonArray.item) {
-        // Fallback for XML-converted structures
         if (Array.isArray(data.jsonArray.item)) {
           rawItems = data.jsonArray.item;
         } else {
@@ -179,7 +231,6 @@ export const fetchBizInfo = async (
       }
     }
 
-    // Normalize
     return rawItems.map(item => normalizeItem(item, filters.type));
 
   } catch (error) {

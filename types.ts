@@ -12,6 +12,8 @@ export interface UnifiedBizItem {
   areas?: string[];        // Areas (Event only)
   tags: string[];          // Hashtags
   dateInfo: string;        // Display formatted date string
+  status: 'OPEN' | 'CLOSED' | 'UPCOMING'; // Calculated Status
+  dDay: string;            // e.g. "D-5", "마감", "접수중"
 }
 
 // Search Filter State
@@ -20,6 +22,7 @@ export interface SearchFilters {
   region: string;
   category: string;
   keyword: string;           // User typed keyword (sent as hashtag)
+  targets: string[];         // Selected target audience tags (e.g. 소상공인, 청년)
 }
 
 export enum LoadingState {

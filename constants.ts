@@ -32,6 +32,20 @@ export const CATEGORIES = [
   { id: "09", name: "기타" },
 ];
 
+// Popular keywords for filtering (sent as hashtags)
+export const TARGET_KEYWORDS = [
+  "소상공인", 
+  "중소기업", 
+  "창업기업", 
+  "예비창업자", 
+  "청년", 
+  "여성기업", 
+  "사회적기업", 
+  "장애인기업",
+  "전통시장",
+  "1인창조"
+];
+
 export const MOCK_DATA = [
   {
     id: "MOCK_001",
@@ -44,7 +58,9 @@ export const MOCK_DATA = [
     category: "창업",
     target: "창업 3년 이내 기업",
     tags: ["창업", "기술", "서울", "경기"],
-    dateInfo: "2025.02.01 ~ 03.15"
+    dateInfo: "2025.02.01 ~ 03.15",
+    status: 'OPEN' as const,
+    dDay: "D-15"
   },
   {
     id: "MOCK_002",
@@ -57,6 +73,8 @@ export const MOCK_DATA = [
     category: "인력",
     areas: ["서울"],
     tags: ["교육", "AI", "마케팅"],
-    dateInfo: "2025.04.01 ~ 04.02"
+    dateInfo: "2025.04.01 ~ 04.02",
+    status: 'UPCOMING' as const,
+    dDay: "접수예정"
   }
 ];
