@@ -173,8 +173,14 @@ export const fetchBizInfo = async (
   const tags: string[] = [];
 
   // Region
-  if (filters.region && filters.region !== '전국') {
-    tags.push(filters.region);
+  if (filters.region && filters.region.length > 0) {
+    // If "전국" is the only selection, we don't add specific region tags (implies All/Nationwide scope in legacy logic)
+    // However, if user selects "전국" AND "서울", we send both.
+    const isOnlyNationwide = filters.region.length === 1 && filters.region[0] === '전국';
+    
+    if (!isOnlyNationwide) {
+      tags.push(...filters.region);
+    }
   }
 
   // Keyword

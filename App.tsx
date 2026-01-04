@@ -10,7 +10,7 @@ const App: React.FC = () => {
   // Filters State
   const [filters, setFilters] = useState<SearchFilters>({
     type: 'program',
-    region: '전국',
+    region: ['전국'], // Multi-select default
     category: '',
     keyword: '',
     targets: []

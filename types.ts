@@ -19,7 +19,7 @@ export interface UnifiedBizItem {
 // Search Filter State
 export interface SearchFilters {
   type: 'program' | 'event'; // Toggle between Program and Event
-  region: string;
+  region: string[];          // Changed to array for multi-selection
   category: string;
   keyword: string;           // User typed keyword (sent as hashtag)
   targets: string[];         // Selected target audience tags (e.g. 소상공인, 청년)
